@@ -3,9 +3,9 @@ apiVersion: v1
 metadata:
   name: springboot-mysql
   annotations:
-    openshift.io/display-name: springboot + MySQL (Persistent)
+    openshift.io/display-name: Springboot + MySQL (Persistent)
     description: >-
-      An Springboot with a MySQL database template. For more information
+      A Springboot with a MySQL database template. For more information
       about using this template, including OpenShift considerations, see
       https://www.atos.net.
     tags: 'quickstart,springboot'
@@ -15,8 +15,8 @@ metadata:
       including a build configuration, application deployment configuration, and
       database deployment configuration.
     template.openshift.io/provider-display-name: 'Atos SE'
-    template.openshift.io/documentation-url: 'https://github.com/openshift/cakephp-ex'
-    template.openshift.io/support-url: 'https://access.redhat.com'
+    template.openshift.io/documentation-url: 'https://github.com/DarrenRatcliffe/openshift/blob/master/springboot-mysql/README.md'
+    template.openshift.io/support-url: 'https://github.com/DarrenRatcliffe/openshift/blob/master/springboot-mysql/README.md'
 message: >-
   The following service(s) have been created in your project: ${NAME},
   ${DATABASE_SERVICE_NAME}.
@@ -24,24 +24,17 @@ message: >-
 
   For more information about using this template, including OpenShift
   considerations, see
-  https://github.com/openshift/cake-ex/blob/master/README.md.
+  https://github.com/DarrenRatcliffe/openshift/blob/master/springboot-mysql/README.md.
 labels:
-  template: cakephp-mysql-persistent
-
-
+  template: springboot-mysql-persistent
 objects:
 - apiVersion: v1
   kind: Secret
   metadata:
     name: "${NAME}"
   stringData:
-      brooklyn-password: "${BROOKLYN_PASSWORD}"
-      brooklyn-username: "${BROOKLYN_USERNAME}"
-      security-user-password: "${SECURITY_USER_PASSWORD}"
-      security-user-name: "${SECURITY_USER_NAME}"
-      brooklyn-uri: "${BROOKLYN_URI}"
-      brooklyn-namespace: "${BROOKLYN_NAMESPACE}"
-      brooklyn-location: "${BROOKLYN_LOCATION}"
+      database-user: '${DATABASE_USER}'
+      database-password: '${DATABASE_PASSWORD}'
 - apiVersion: v1
   kind: Route
   metadata:
@@ -161,41 +154,25 @@ objects:
         - image: ${NAME}:latest
           name: "${NAME}"
           env:
-            - name: "BROOKLYN_USERNAME"
+            - name: DATABASE_SERVICE_NAME
+              value: '${DATABASE_SERVICE_NAME}'
+            - name: DATABASE_ENGINE
+              value: '${DATABASE_ENGINE}'
+            - name: DATABASE_NAME
+              value: '${DATABASE_NAME}'
+            - name: DATABASE_USER
               valueFrom:
                 secretKeyRef:
-                  key: "brooklyn-username"
-                  name: "${NAME}"
-            - name: "BROOKLYN_PASSWORD"
+                  name: '${NAME}'
+                  key: database-user
+            - name: DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  key: "brooklyn-password"
-                  name: "${NAME}"
-            - name: "BROOKLYN_URI"
-              valueFrom:
-                secretKeyRef:
-                  key: "brooklyn-uri"
-                  name: "${NAME}"
-            - name: "SECURITY_USER_NAME"
-              valueFrom:
-                secretKeyRef:
-                  key: "security-user-name"
-                  name: "${NAME}"
-            - name: "SECURITY_USER_PASSWORD"
-              valueFrom:
-                secretKeyRef:
-                  key: "security-user-password"
-                  name: "${NAME}"
-            - name: "BROOKLYN_LOCATION"
-              valueFrom:
-                secretKeyRef:
-                  key: "brooklyn-location"
-                  name: "${NAME}"
-            - name: "BROOKLYN_NAMESPACE"
-              valueFrom:
-                secretKeyRef:
-                  key: "brooklyn-namespace"
-                  name: "${NAME}"
+                  name: '${NAME}'
+                  key: database-password
+          resources:
+            limits:
+              memory: '${MEMORY_LIMIT}'
 
             #- name: "BROOKLYN_LOCATION"
               #value: "${BROOKLYN_LOCATION}"
@@ -229,6 +206,7 @@ objects:
   metadata:
     annotations:
       openshift.io/generated-by: OpenShiftNewApp
+      service.alpha.openshift.io/dependencies: '[{"name": "${DATABASE_SERVICE_NAME}", "kind": "Service"}]'
     creationTimestamp: null
     labels:
       app: "${NAME}"
@@ -244,75 +222,176 @@ objects:
       deploymentconfig: "${NAME}"
   status:
     loadBalancer: {}
+#Database stuff
+- kind: PersistentVolumeClaim
+  apiVersion: v1
+  metadata:
+    name: '${DATABASE_SERVICE_NAME}'
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: '${VOLUME_CAPACITY}'
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: '${DATABASE_SERVICE_NAME}'
+    annotations:
+      description: Exposes the database server
+  spec:
+    ports:
+      - name: mysql
+        port: 3306
+        targetPort: 3306
+    selector:
+      name: '${DATABASE_SERVICE_NAME}'
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: '${DATABASE_SERVICE_NAME}'
+    annotations:
+      description: Defines how to deploy the database
+  spec:
+    strategy:
+      type: Recreate
+    triggers:
+      - type: ImageChange
+        imageChangeParams:
+          automatic: true
+          containerNames:
+            - mysql
+          from:
+            kind: ImageStreamTag
+            namespace: '${NAMESPACE}'
+            name: 'mysql:5.7'
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      name: '${DATABASE_SERVICE_NAME}'
+    template:
+      metadata:
+        name: '${DATABASE_SERVICE_NAME}'
+        labels:
+          name: '${DATABASE_SERVICE_NAME}'
+      spec:
+        volumes:
+          - name: '${DATABASE_SERVICE_NAME}-data'
+            persistentVolumeClaim:
+              claimName: '${DATABASE_SERVICE_NAME}'
+        containers:
+          - name: mysql
+            image: ' '
+            ports:
+              - containerPort: 3306
+            volumeMounts:
+              - name: '${DATABASE_SERVICE_NAME}-data'
+                mountPath: /var/lib/mysql/data
+            readinessProbe:
+              timeoutSeconds: 1
+              initialDelaySeconds: 5
+              exec:
+                command:
+                  - /bin/sh
+                  - '-i'
+                  - '-c'
+                  - >-
+                    MYSQL_PWD='${DATABASE_PASSWORD}' mysql -h 127.0.0.1 -u
+                    ${DATABASE_USER} -D ${DATABASE_NAME} -e 'SELECT 1'
+            livenessProbe:
+              timeoutSeconds: 1
+              initialDelaySeconds: 30
+              tcpSocket:
+                port: 3306
+            env:
+              - name: MYSQL_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: '${NAME}'
+                    key: database-user
+              - name: MYSQL_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: '${NAME}'
+                    key: database-password
+              - name: MYSQL_DATABASE
+                value: '${DATABASE_NAME}'
+            resources:
+              limits:
+                memory: '${MEMORY_MYSQL_LIMIT}'
+#new parameters
 parameters:
-  - name: "NAME"
-    description: "The name assigned to all of the frontend objects defined in this template."
-    displayName: "Name"
+  - name: NAME
+    displayName: Name
+    description: The name assigned to all of the frontend objects defined in this template.
     required: true
-    value: "compose-service-broker"
-  - name: "NAMESPACE"
-    description: "The OpenShift Namespace where the ImageStream resides."
-    displayName: "Namespace"
+    value: springboot-mysql-persistent
+  - name: NAMESPACE
+    displayName: Namespace
+    description: The OpenShift Namespace where the ImageStream resides.
     required: true
-    value: "openshift"
-  - name: "MEMORY_LIMIT"
-    description: "Maximum amount of memory the container can use."
-    displayName: "Memory Limit"
+    value: openshift
+  - name: MEMORY_LIMIT
+    displayName: Memory Limit
+    description: Maximum amount of memory the CakePHP container can use.
     required: true
-    value: "1024Mi"
-  - name: "SOURCE_REPOSITORY_URL"
-    description: "The URL of the repository with your application source code."
-    displayName: "Git Repository URL"
+    value: 512Mi
+  - name: MEMORY_MYSQL_LIMIT
+    displayName: Memory Limit (MySQL)
+    description: Maximum amount of memory the MySQL container can use.
     required: true
-    value: "https://github.com/DarrenRatcliffe/brooklyn-service-broker"
-  - name: "SOURCE_REPOSITORY_REF"
-    description: "Set this to a branch name, tag or other ref of your repository if you are not using the default branch."
-    displayName: "Git Reference"
-    value: "openshift"
-  - name: "CONTEXT_DIR"
-    description: "Set this to the relative path to your project if it is not in the root of your repository."
-    displayName: "Context Directory"
-  - name: "APPLICATION_DOMAIN"
-    description: "The exposed hostname that will route to the Compose service broker, if left blank a value will be defaulted."
-    displayName: "Application Hostname"
-    value: ""
-  - name: "GITHUB_WEBHOOK_SECRET"
-    description: "Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted."
-    displayName: "GitHub Webhook Secret"
-    from: "[a-zA-Z0-9]{40}"
-    generate: "expression"
-  - name: BROOKLYN_LOCATION
-    displayName: "Compose deployment location"
-    description: "The location where the broker deploys catalog services to"
-    value: "AWS Ireland"
+    value: 512Mi
+  - name: VOLUME_CAPACITY
+    displayName: Volume Capacity
+    description: 'Volume space available for data, e.g. 512Mi, 2Gi'
+    value: 1Gi
     required: true
-  - name: BROOKLYN_NAMESPACE
-    displayName: "Compose catalog prepend"
-    description: "Will be used to prepend catalog items loaded in the service catalog to make them identifiable as being orchestrated by Compose"
-    value: "Compose"
+  - name: SOURCE_REPOSITORY_URL
+    displayName: Git Repository URL
+    description: The URL of the repository with your application source code.
     required: true
-  - name: BROOKLYN_URI
-    displayName: "Compose instance URL"
-    description: "The location of the Compose instance"
-    value: "https://incubation-ida.compose.canopy-cloud.com"
+    value: 'https://github.com/cloudfoundry-samples/spring-music.git'
+  - name: SOURCE_REPOSITORY_REF
+    displayName: Git Reference
+    description: >-
+      Set this to a branch name, tag or other ref of your repository if you are
+      not using the default branch.
+  - name: CONTEXT_DIR
+    displayName: Context Directory
+    description: >-
+      Set this to the relative path to your project if it is not in the root of
+      your repository.
+  - name: APPLICATION_DOMAIN
+    displayName: Application Hostname
+    description: >-
+      The exposed hostname that will route to the Springboot service, if left blank
+      a value will be defaulted.
+    value: ''
+  - name: GITHUB_WEBHOOK_SECRET
+    displayName: GitHub Webhook Secret
+    description: >-
+      Github trigger secret.  A difficult to guess string encoded as part of the
+      webhook URL.  Not encrypted.
+    generate: expression
+    from: '[a-zA-Z0-9]{40}'
+  - name: DATABASE_SERVICE_NAME
+    displayName: Database Service Name
     required: true
-  - name: BROOKLYN_USERNAME
-    displayName: "Compose user"
-    description: "The Compose user to use"
-    value: "compose@canopy-cloud.com"
+    value: mysql
+  - name: DATABASE_ENGINE
+    displayName: Database Engine
+    description: 'Database engine: postgresql, mysql or sqlite (default).'
     required: true
-  - name: BROOKLYN_PASSWORD
-    displayName: "Compose user password"
-    description: "The Compose user password to use"
-    value: "fEFaBmOAvWXQ1Eeqy6Cl"
+    value: mysql
+  - name: DATABASE_NAME
+    displayName: Database Name
     required: true
-  - name: SECURITY_USER_NAME
-    displayName: "Compose broker username"
-    description: "The Compose broker user to use"
-    value: "openshift"
+    value: default
+  - name: DATABASE_USER
+    displayName: Database User
     required: true
-  - name: SECURITY_USER_PASSWORD
-    displayName: "Compose broker user password"
-    description: "The Compose broker user password to use"
-    value: "0penshift"
-    required: true
+    value: dbuser
+  - name: DATABASE_PASSWORD
+    displayName: Database Password
+    generate: expression
+    from: '[a-zA-Z0-9]{16}'
