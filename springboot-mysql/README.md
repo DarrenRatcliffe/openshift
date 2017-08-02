@@ -1,1 +1,1 @@
-# openshift
+# springboot-mysql quickstart template
