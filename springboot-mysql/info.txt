@@ -1,0 +1,3 @@
+https://stash.fsc.atos-services.net/scm/ci4/poc001.git
+/FactoryMaintainance/fm/fm-rest-api
+A588232/May_2017
