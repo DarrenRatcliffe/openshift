@@ -36,6 +36,13 @@ objects:
       database-user: '${DATABASE_USER}'
       database-password: '${DATABASE_PASSWORD}'
 - apiVersion: v1
+  kind: Secret
+  metadata:
+    name: "gitsecret"
+  stringData:
+      username: '${GIT_USER}'
+      password: '${GIT_PASSWORD}'
+- apiVersion: v1
   kind: Route
   metadata:
     annotations:
@@ -106,7 +113,10 @@ objects:
       git:
         ref: "${SOURCE_REPOSITORY_REF}"
         uri: "${SOURCE_REPOSITORY_URL}"
+      contextDir: '${CONTEXT_DIR}'
       type: Git
+      sourceSecret:
+        name: "gitsecret"
     strategy:
       sourceStrategy:
         from:
@@ -351,6 +361,10 @@ parameters:
     description: The URL of the repository with your application source code.
     required: true
     value: 'https://github.com/cloudfoundry-samples/spring-music.git'
+  - name: GIT_USER
+    displayName: Git Username
+  - name: GIT_PASSWORD
+    displayName: Git Username password
   - name: SOURCE_REPOSITORY_REF
     displayName: Git Reference
     description: >-
