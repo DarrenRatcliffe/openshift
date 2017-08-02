@@ -3,7 +3,7 @@ apiVersion: v1
 metadata:
   name: springboot-mysql
   annotations:
-    openshift.io/display-name: Springboot + MySQL (Persistent)
+    openshift.io/display-name: Java + MySQL (Persistent)
     description: >-
       A Springboot with a MySQL database template. For more information
       about using this template, including OpenShift considerations, see
@@ -61,19 +61,21 @@ objects:
     creationTimestamp: null
     labels:
       app: "${NAME}"
-    name: springboot-s2i
+    name: s2i-java
   spec:
     lookupPolicy:
       local: false
     tags:
     - annotations:
-        openshift.io/imported-from: jorgemoralespou/springboot-s2i
+        openshift.io/imported-from: jorgemoralespou/s2i-java
       from:
         kind: DockerImage
-        name: jorgemoralespou/springboot-s2i
+        name: jorgemoralespou/s2i-java
       generation: null
       importPolicy: {}
       name: latest
+      importPolicy:
+        scheduled: true
       referencePolicy:
         type: ""
   status:
@@ -121,7 +123,7 @@ objects:
       sourceStrategy:
         from:
           kind: ImageStreamTag
-          name: springboot-s2i:latest
+          name: s2i-java:latest
       type: Source
     triggers:
     - github:
@@ -183,16 +185,9 @@ objects:
           resources:
             limits:
               memory: '${MEMORY_LIMIT}'
-
-            #- name: "BROOKLYN_LOCATION"
-              #value: "${BROOKLYN_LOCATION}"
-            #- name: "BROOKLYN_NAMESPACE"
-              #value: "${BROOKLYN_NAMESPACE}"
-
           ports:
           - containerPort: 8080
             protocol: TCP
-          #resources: {}
     test: false
     triggers:
     - type: ConfigChange
