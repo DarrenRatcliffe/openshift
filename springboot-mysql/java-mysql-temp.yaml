@@ -72,7 +72,7 @@ objects:
         kind: DockerImage
         name: jorgemoralespou/s2i-java
       generation: null
-      importPolicy: {}
+      #importPolicy: {}
       name: latest
       importPolicy:
         scheduled: true
